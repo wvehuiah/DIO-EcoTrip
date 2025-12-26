@@ -15,7 +15,7 @@ Projeto desenvolvido no contexto do desafio **“Calculadora EcoTrip: Simulador 
 
 ---  
 
-#### ***Resultado final do desafio -=-> [EcoTrip by OLIMPUS](https://wvehuiah.github.io/DIO-EcoTrip/)***
+#### ***Resultado final do desafio -=-> [EcoTrip by OLIMPUS](https://dio-ecotrip.onrender.com)***
 
 ---
 
