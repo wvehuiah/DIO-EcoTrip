@@ -1,8 +1,9 @@
-name: Deploy Static Frontend
+name: Deploy Frontend to GitHub Pages
 
 on:
   push:
-    branches: ["master"]
+    branches: [ "master" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,12 +16,10 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-
-    # ✅ ESSENCIAL para o deploy-pages
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -29,11 +28,11 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload frontend
+      - name: Upload artifact (frontend)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend
+          path: ./frontend
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

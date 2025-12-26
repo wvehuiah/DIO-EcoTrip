@@ -1,6 +1,14 @@
-// =====================
+const API_BASE =
+    document.querySelector('meta[name="api-base"]')?.content?.trim() || "";
+
+function api(path) {
+    if (!API_BASE) throw new Error("API_BASE não configurado no index.html");
+    return `${API_BASE}${path}`;
+}
+
+// ============
 // Configuração (frontend apenas para UI/comparativo)
-// Backend é a "fonte da verdade" para o registro e cálculo oficial.
+// Backend é a "fonte da verdade" para o registro e cálculo oficial no modo automático.
 // =====================
 const FACTORS_KG_PER_KM = {
     bike: 0.0,
@@ -40,14 +48,14 @@ const creditsBigEl = el("creditsBig");
 const costBigEl = el("costBig");
 const rangeSubEl = el("rangeSub");
 
-const calcIdTextEl = el("calcIdText");
-const receiptBtn = el("receiptBtn");
+const calcIdTextEl = el("calcIdText");   // pode ser null dependendo do seu HTML
+const receiptBtn = el("receiptBtn");     // pode ser null dependendo do seu HTML
 
 const transportWrap = el("transportWrap");
 const calcBtn = el("calcBtn");
 const offsetBtn = el("offsetBtn");
 
-// datalist
+// datalist (autocomplete)
 const originListEl = el("originList");
 const destListEl = el("destList");
 
@@ -55,17 +63,16 @@ const destListEl = el("destList");
 // Estado
 // =====================
 let selectedMode = "car";
-let distanceDirty = true;
+let lastCalcId = null;
 
 let originClearedOnce = false;
 let destClearedOnce = false;
-
-let lastCalcId = null; // para gerar recibo sob demanda
 
 // =====================
 // UI helpers
 // =====================
 function setLoading(btn, loading) {
+    if (!btn) return;
     btn.disabled = loading;
     btn.textContent = loading ? "Calculando..." : "Calcular Emissões";
 }
@@ -84,9 +91,13 @@ function emissionKg(mode, distanceKm) {
 
 function setSelectedMode(mode) {
     selectedMode = mode;
-    [...transportWrap.querySelectorAll(".transport")].forEach((btn) => {
-        btn.classList.toggle("selected", btn.dataset.mode === mode);
-    });
+
+    if (transportWrap) {
+        [...transportWrap.querySelectorAll(".transport")].forEach((btn) => {
+            btn.classList.toggle("selected", btn.dataset.mode === mode);
+        });
+    }
+
     updateSelectedBadges();
 }
 
@@ -100,22 +111,30 @@ function updateSelectedBadges() {
 }
 
 function showReceiptUI(calcId) {
-    lastCalcId = calcId;
-    calcIdTextEl.textContent = calcId || "—";
-    receiptBtn.classList.toggle("hidden", !calcId);
+    lastCalcId = calcId || null;
+
+    if (calcIdTextEl) calcIdTextEl.textContent = calcId || "—";
+    if (receiptBtn) receiptBtn.classList.toggle("hidden", !calcId);
 }
 
 // =====================
 // Limpar ao focar (1x por ciclo)
 // =====================
 function clearOnFirstFocus(inputEl, getSetFlag) {
+    if (!inputEl) return;
+
     inputEl.addEventListener("focus", () => {
         if (!getSetFlag()) {
             inputEl.value = "";
-            if (!manualDistanceEl.checked) {
+
+            // ao iniciar uma nova entrada, “zera” a distância automática
+            if (!manualDistanceEl?.checked && distanceEl) {
                 distanceEl.value = "";
-                distanceDirty = true;
             }
+
+            // recibo anterior não vale mais
+            showReceiptUI(null);
+
             getSetFlag(true);
         }
     });
@@ -131,7 +150,6 @@ clearOnFirstFocus(destEl, (v) => {
     return destClearedOnce;
 });
 
-// Reinicia flags após um cálculo bem sucedido (para o próximo ciclo)
 function resetClearFlags() {
     originClearedOnce = false;
     destClearedOnce = false;
@@ -150,7 +168,7 @@ async function fetchCalc(origin, destination, mode) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error || "Falha ao calcular.");
 
-    return data; // { calc_id, pdf_url, record }
+    return data; // { calc_id, record }
 }
 
 // =====================
@@ -172,6 +190,7 @@ async function fetchSuggestions(q) {
 }
 
 function fillDatalist(listEl, suggestions) {
+    if (!listEl) return;
     listEl.innerHTML = "";
     for (const s of suggestions) {
         const opt = document.createElement("option");
@@ -181,48 +200,58 @@ function fillDatalist(listEl, suggestions) {
 }
 
 const onOriginType = debounce(async () => {
+    if (!originEl) return;
     const q = originEl.value.trim();
+    if (!originListEl) return;
     if (q.length < 3) { originListEl.innerHTML = ""; return; }
     try {
         const suggestions = await fetchSuggestions(q);
         fillDatalist(originListEl, suggestions);
-    } catch {}
+    } catch {
+        // silencioso por UX (rede instável)
+    }
 }, 250);
 
 const onDestType = debounce(async () => {
+    if (!destEl) return;
     const q = destEl.value.trim();
+    if (!destListEl) return;
     if (q.length < 3) { destListEl.innerHTML = ""; return; }
     try {
         const suggestions = await fetchSuggestions(q);
         fillDatalist(destListEl, suggestions);
-    } catch {}
+    } catch {
+        // silencioso por UX (rede instável)
+    }
 }, 250);
 
-originEl.addEventListener("input", onOriginType);
-destEl.addEventListener("input", onDestType);
+originEl?.addEventListener("input", onOriginType);
+destEl?.addEventListener("input", onDestType);
 
 // =====================
-// Invalidate (mudou origem/destino => distância suja)
+// Invalidate: ao mudar origem/destino, zera distância automática e recibo
 // =====================
 [originEl, destEl].forEach((input) => {
+    if (!input) return;
+
     input.addEventListener("input", () => {
-        if (!manualDistanceEl.checked) {
-            distanceDirty = true;
+        // distância automática fica “suja”
+        if (!manualDistanceEl?.checked && distanceEl) {
             distanceEl.value = "";
         }
-        // ao mexer em origem/destino, o recibo anterior já não vale para o que está na tela
         showReceiptUI(null);
     });
 });
 
-// Se alternar manual/auto
-manualDistanceEl.addEventListener("change", () => {
+// alternância manual/auto
+manualDistanceEl?.addEventListener("change", () => {
     const manual = manualDistanceEl.checked;
-    distanceEl.disabled = !manual;
+    if (distanceEl) distanceEl.disabled = !manual;
 
-    if (!manual) {
-        distanceDirty = true;
+    // Se voltar para automático, zera distância e recibo
+    if (!manual && distanceEl) {
         distanceEl.value = "";
+        showReceiptUI(null);
     }
 });
 
@@ -254,34 +283,36 @@ function fillComparatives(distanceKm) {
 }
 
 function fillTopResults(distanceKm) {
-    routeBigEl.textContent = `${originEl.value} → ${destEl.value}`;
-    distanceBigEl.textContent = `${toPtNumber(distanceKm, 2)} km`;
+    if (routeBigEl) routeBigEl.textContent = `${originEl?.value || "—"} → ${destEl?.value || "—"}`;
+    if (distanceBigEl) distanceBigEl.textContent = `${toPtNumber(distanceKm, 2)} km`;
 
     const kgSel = emissionKg(selectedMode, distanceKm);
-    emissionBigEl.textContent = `${toPtNumber(kgSel, 2)} kg CO₂`;
-    modeSubEl.textContent = MODE_LABEL[selectedMode] ?? "—";
+    if (emissionBigEl) emissionBigEl.textContent = `${toPtNumber(kgSel, 2)} kg CO₂`;
+    if (modeSubEl) modeSubEl.textContent = MODE_LABEL[selectedMode] ?? "—";
 
     const carKg = emissionKg("car", distanceKm);
     const delta = kgSel - carKg;
     const pct = carKg > 0 ? (kgSel / carKg) * 100 : 0;
 
     const sign = delta >= 0 ? "+" : "";
-    deltaBigEl.textContent = `${sign}${toPtNumber(delta, 2)} kg`;
-    deltaSubEl.textContent = `${toPtNumber(pct, 2)}% ${delta >= 0 ? "mais emissões" : "menos emissões"}`;
+    if (deltaBigEl) deltaBigEl.textContent = `${sign}${toPtNumber(delta, 2)} kg`;
+    if (deltaSubEl) deltaSubEl.textContent =
+        `${toPtNumber(pct, 2)}% ${delta >= 0 ? "mais emissões" : "menos emissões"}`;
 }
 
 function fillCredits(distanceKm) {
     const kgSel = emissionKg(selectedMode, distanceKm);
     const credits = kgSel / 1000;
 
-    creditsBigEl.textContent = toPtNumber(credits, 4);
+    if (creditsBigEl) creditsBigEl.textContent = toPtNumber(credits, 4);
 
     const base = credits * CREDIT_PRICE.base;
     const min = credits * CREDIT_PRICE.min;
     const max = credits * CREDIT_PRICE.max;
 
-    costBigEl.textContent = `R$ ${toPtNumber(base, 2)}`;
-    rangeSubEl.textContent = `Variação: R$ ${toPtNumber(min, 2)} - R$ ${toPtNumber(max, 2)}`;
+    if (costBigEl) costBigEl.textContent = `R$ ${toPtNumber(base, 2)}`;
+    if (rangeSubEl) rangeSubEl.textContent =
+        `Variação: R$ ${toPtNumber(min, 2)} - R$ ${toPtNumber(max, 2)}`;
 }
 
 // =====================
@@ -291,34 +322,51 @@ async function calculate() {
     setLoading(calcBtn, true);
 
     try {
-        const origin = originEl.value.trim();
-        const destination = destEl.value.trim();
+        const origin = originEl?.value?.trim() || "";
+        const destination = destEl?.value?.trim() || "";
+
         if (!origin || !destination) throw new Error("Informe origem e destino.");
 
-        // Se manual, valida antes (backend ainda registra pelo /api/calc usando rota real;
-        // se você quiser registrar manual no backend também, a gente abre um endpoint separado.)
-        if (manualDistanceEl.checked) {
-            const km = Number(distanceEl.value);
+        // =====================
+        // Modo MANUAL: cálculo só no frontend (sem registro oficial)
+        // =====================
+        if (manualDistanceEl?.checked) {
+            const km = Number(distanceEl?.value);
             if (!km || km <= 0) throw new Error("Distância manual inválida.");
-            // Ainda assim: registra e calcula oficial via backend (rota) OU você decide registrar manual.
-            // Para agora, seguimos com cálculo oficial via backend:
+
+            // Atualiza UI com o valor manual
+            fillTopResults(km);
+            fillComparatives(km);
+            fillCredits(km);
+
+            // Sem recibo: não houve registro no backend
+            showReceiptUI(null);
+
+            // prepara próximo ciclo de limpeza ao focar
+            resetClearFlags();
+            return;
         }
 
+        // =====================
+        // Modo AUTOMÁTICO: cálculo oficial + registro via backend
+        // =====================
         const data = await fetchCalc(origin, destination, selectedMode);
 
-        // Distância oficial do backend
-        const distanceKm = data.record.inputs.distance_km;
-        distanceEl.value = distanceKm;
-        distanceDirty = false;
+        const distanceKm = data?.record?.inputs?.distance_km;
+        if (typeof distanceKm !== "number" || !isFinite(distanceKm) || distanceKm <= 0) {
+            throw new Error("Distância inválida retornada pelo backend.");
+        }
+
+        if (distanceEl) distanceEl.value = distanceKm;
 
         fillTopResults(distanceKm);
         fillComparatives(distanceKm);
         fillCredits(distanceKm);
 
-        // MOSTRA o recibo sob demanda (não abre PDF)
-        showReceiptUI(data.calc_id);
+        // habilita recibo sob demanda
+        showReceiptUI(data?.calc_id || null);
 
-        // prepara próximo ciclo: ao clicar em origem/destino, limpa novamente uma vez
+        // prepara próximo ciclo: ao focar, limpa novamente uma vez
         resetClearFlags();
 
     } catch (err) {
@@ -331,26 +379,26 @@ async function calculate() {
 // =====================
 // Eventos UI
 // =====================
-transportWrap.addEventListener("click", (e) => {
+transportWrap?.addEventListener("click", (e) => {
     const btn = e.target.closest(".transport");
     if (!btn) return;
     setSelectedMode(btn.dataset.mode);
 });
 
-calcBtn.addEventListener("click", calculate);
+calcBtn?.addEventListener("click", calculate);
 
-receiptBtn.addEventListener("click", () => {
+receiptBtn?.addEventListener("click", () => {
     if (!lastCalcId) return;
     window.open(`/api/receipt/${lastCalcId}.pdf`, "_blank");
 });
 
-offsetBtn.addEventListener("click", () => {
+offsetBtn?.addEventListener("click", () => {
     alert("Aqui você pluga checkout + registro de compensação no backend.");
 });
 
 // =====================
 // Init
 // =====================
-distanceEl.disabled = true;
+if (distanceEl) distanceEl.disabled = true;
 setSelectedMode(selectedMode);
 showReceiptUI(null);
