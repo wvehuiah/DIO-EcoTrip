@@ -54,7 +54,7 @@ const destListEl = el("destList");
 // =====================
 // Estado
 // =====================
-let selectedMode = "truck";
+let selectedMode = "car";
 let distanceDirty = true;
 
 let originClearedOnce = false;
