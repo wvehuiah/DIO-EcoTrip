@@ -279,21 +279,37 @@ app.post("/api/calc", async (req, res) => {
         const destination = String(req.body?.destination || "").trim();
         const transport = String(req.body?.mode || req.body?.transport || "car").trim();
 
-        if (!origin || !destination) {
-            return res.status(400).json({ error: "Informe origem e destino." });
-        }
-
         if (!Object.prototype.hasOwnProperty.call(FACTORS, transport)) {
             return res.status(400).json({ error: "Modo de transporte inválido." });
         }
 
-        const km = await directionsDistanceKm(origin, destination, "driving-car");
+        // ✅ Se vier distance_km, é modo manual (não chama ORS directions)
+        const rawKm = req.body?.distance_km;
+        const isManual = rawKm !== undefined && rawKm !== null && String(rawKm).trim() !== "";
 
-        if (km > 6000) {
-            return res.status(400).json({
-                error:
-                    "Distância excede limites práticos. Verifique origem/destino (ex.: selecione cidade, não estado/país).",
-            });
+        let km;
+
+        if (isManual) {
+            km = Number(String(rawKm).replace(/\./g, "").replace(",", "."));
+            if (!Number.isFinite(km) || km <= 0) {
+                return res.status(400).json({ error: "Distância manual inválida." });
+            }
+            if (km > 60000) {
+                return res.status(400).json({ error: "Distância manual muito alta. Verifique o valor informado." });
+            }
+        } else {
+            // modo automático exige origem/destino
+            if (!origin || !destination) {
+                return res.status(400).json({ error: "Informe origem e destino." });
+            }
+            km = await directionsDistanceKm(origin, destination, "driving-car");
+
+            if (km > 6000) {
+                return res.status(400).json({
+                    error:
+                        "Distância excede limites práticos. Verifique origem/destino (selecione cidade, não estado/país).",
+                });
+            }
         }
 
         const emission = km * FACTORS[transport];
@@ -307,17 +323,16 @@ app.post("/api/calc", async (req, res) => {
         const costMin = credits * CREDIT_PRICE.min;
         const costMax = credits * CREDIT_PRICE.max;
 
-        // registrar
         const calcId = newCalcId();
         const createdAt = new Date().toISOString();
 
         const record = {
             calcId,
             createdAt,
-            provider: "ORS",
+            provider: isManual ? "MANUAL" : "ORS",
             inputs: {
-                origin,
-                destination,
+                origin: isManual ? "Distância manual" : origin,
+                destination: isManual ? "" : destination,
                 distance_km: Number(km.toFixed(2)),
                 mode: transport,
                 mode_label: MODE_LABEL[transport] || transport,
