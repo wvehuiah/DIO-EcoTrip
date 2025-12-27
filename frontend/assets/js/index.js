@@ -1,6 +1,5 @@
 // =====================
-// Configuração (frontend apenas para UI/comparativo)
-// Backend é a "fonte da verdade" para o registro e cálculo oficial.
+// Configuração Frontend
 // =====================
 const FACTORS_KG_PER_KM = {
     bike: 0.0,
@@ -16,7 +15,7 @@ const MODE_LABEL = {
     truck: "Caminhão"
 };
 
-const CREDIT_PRICE = { base: 45, min: 25, max: 85 };
+const CREDIT_PRICE = {base: 45, min: 25, max: 85};
 
 const el = (id) => document.getElementById(id);
 
@@ -160,6 +159,18 @@ function resetClearFlags() {
 // =====================
 // API: Cálculo oficial + registro (SEM PDF automático)
 // =====================
+// async function fetchCalc(origin, destination, mode) {
+//     const res = await fetch("/api/calc", {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ origin, destination, mode })
+//     });
+//
+//     const data = await res.json().catch(() => ({}));
+//     if (!res.ok) throw new Error(data?.error || "Falha ao calcular.");
+//
+//     return data; // { calc_id, pdf_url, record }
+// }
 async function fetchCalc(payload) {
     const res = await fetch("/api/calc", {
         method: "POST",
@@ -209,7 +220,8 @@ const onOriginType = debounce(async () => {
     try {
         const suggestions = await fetchSuggestions(q);
         fillDatalist(originListEl, suggestions);
-    } catch {}
+    } catch {
+    }
 }, 250);
 
 const onDestType = debounce(async () => {
@@ -222,7 +234,8 @@ const onDestType = debounce(async () => {
     try {
         const suggestions = await fetchSuggestions(q);
         fillDatalist(destListEl, suggestions);
-    } catch {}
+    } catch {
+    }
 }, 250);
 
 originEl.addEventListener("input", onOriginType);
@@ -290,7 +303,7 @@ function fillComparatives(distanceKm) {
     updateSelectedBadges();
 }
 
-function fillTopResults(distanceKm, { manual = false } = {}) {
+function fillTopResults(distanceKm, {manual = false} = {}) {
     routeBigEl.textContent = manual
         ? "Distância manual (sem rota)"
         : `${originEl.value} → ${destEl.value}`;
@@ -352,7 +365,7 @@ function validateKm(km) {
 // =====================
 async function calculate() {
     setLoading(calcBtn, true);
-
+    
     try {
         // ======== MODO MANUAL (chama backend para registrar + PDF) ========
         if (manualDistanceEl.checked) {
@@ -418,9 +431,6 @@ receiptBtn.addEventListener("click", () => {
     window.open(`/api/receipt/${lastCalcId}.pdf`, "_blank");
 });
 
-offsetBtn.addEventListener("click", () => {
-    alert("Aqui você pluga checkout + registro de compensação no backend.");
-});
 
 // =====================
 // Init

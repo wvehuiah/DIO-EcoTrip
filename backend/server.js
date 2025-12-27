@@ -1,5 +1,5 @@
 /**
- * EcoTrip by Olimpus — backend (Express)
+ * EcoTrip — backend (Express)
  * - /api/suggest     (autocomplete via ORS geocode)
  * - /api/distance    (distância km via ORS directions)
  * - /api/calc        (cálculo + registro + retorna calc_id e pdf_url)
@@ -9,7 +9,7 @@
  * - Node >= 18 (fetch nativo)
  * - ENV: ORS_API_KEY (obrigatório)
  * - ENV: ALLOWED_ORIGINS (opcional) CSV, ex:
- *   "http://localhost:3000,https://wvehuiah.github.io"
+ *   "http://localhost:3000,https://seuuser.github.io"
  */
 
 import express from "express";
@@ -17,8 +17,8 @@ import dotenv from "dotenv";
 import path from "path";
 import crypto from "crypto";
 import cors from "cors";
-import { fileURLToPath } from "url";
-import { buildReceiptPdf } from "./pdf.js";
+import {fileURLToPath} from "url";
+import {buildReceiptPdf} from "./pdf.js";
 
 dotenv.config();
 
@@ -28,6 +28,7 @@ const app = express();
 // ====== Paths (ESM) ======
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// ✅ frontend está na raiz do projeto
 const FRONTEND_DIR = path.join(__dirname, "../frontend");
 
 // ====== Config ======
@@ -54,7 +55,7 @@ const ALLOWED_ORIGINS = (() => {
 })();
 
 // ====== Middlewares ======
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({limit: "1mb"}));
 
 // CORS: necessário se o frontend estiver em domínio diferente (ex.: GitHub Pages)
 // Observação: se você servir o frontend via este backend (mesma origem), CORS não atrapalha.
@@ -82,7 +83,7 @@ app.use((req, res, next) => {
 app.use(express.static(FRONTEND_DIR));
 
 // ====== Health ======
-app.get("/health", (req, res) => res.json({ ok: true }));
+app.get("/health", (req, res) => res.json({ok: true}));
 
 // ====== Constantes de cálculo ======
 const FACTORS = {
@@ -99,7 +100,7 @@ const MODE_LABEL = {
     truck: "Caminhão",
 };
 
-const CREDIT_PRICE = { base: 45, min: 25, max: 85 };
+const CREDIT_PRICE = {base: 45, min: 25, max: 85};
 const FACTORS_VERSION = "2025.12.26";
 
 // Registro em memória (MVP)
@@ -125,8 +126,8 @@ async function orsFetchJson(url, options = {}) {
     assertORSKey();
 
     // Monta headers de forma segura (não envie Content-Type em GET sem body)
-    const baseHeaders = { Accept: "application/json", Authorization: ORS_API_KEY };
-    const headers = { ...baseHeaders, ...(options.headers || {}) };
+    const baseHeaders = {Accept: "application/json", Authorization: ORS_API_KEY};
+    const headers = {...baseHeaders, ...(options.headers || {})};
 
     // Se tiver body e não tiver Content-Type, assume JSON
     const hasBody = typeof options.body === "string" || options.body instanceof Uint8Array;
@@ -147,7 +148,7 @@ async function orsFetchJson(url, options = {}) {
             `Falha ORS (${r.status})`;
         const err = new Error(msg);
         err.status = 502;
-        err.details = { status: r.status, data };
+        err.details = {status: r.status, data};
         throw err;
     }
 
@@ -163,7 +164,7 @@ async function geocodeOne(text) {
     url.searchParams.set("size", "1");
     url.searchParams.set("boundary.country", "BR");
 
-    const data = await orsFetchJson(url.toString(), { method: "GET" });
+    const data = await orsFetchJson(url.toString(), {method: "GET"});
 
     const f = data?.features?.[0];
     const lon = f?.geometry?.coordinates?.[0];
@@ -175,7 +176,7 @@ async function geocodeOne(text) {
         throw err;
     }
 
-    return { lon, lat };
+    return {lon, lat};
 }
 
 // ====== Suggest (autocomplete) ======
@@ -187,7 +188,7 @@ async function suggestPlaces(q, size = 6) {
     url.searchParams.set("size", String(size));
     url.searchParams.set("boundary.country", "BR");
 
-    const data = await orsFetchJson(url.toString(), { method: "GET" });
+    const data = await orsFetchJson(url.toString(), {method: "GET"});
 
     const features = Array.isArray(data?.features) ? data.features : [];
     return features
@@ -203,13 +204,13 @@ async function suggestPlaces(q, size = 6) {
 app.get("/api/suggest", async (req, res) => {
     try {
         const q = String(req.query.q || "").trim();
-        if (q.length < 3) return res.json({ suggestions: [] });
+        if (q.length < 3) return res.json({suggestions: []});
 
         const suggestions = await suggestPlaces(q, 6);
-        return res.json({ suggestions });
+        return res.json({suggestions});
     } catch (e) {
         console.error("ERRO /api/suggest:", e?.details || e);
-        return res.status(e.status || 500).json({ error: e.message || "Erro interno" });
+        return res.status(e.status || 500).json({error: e.message || "Erro interno"});
     }
 });
 
@@ -227,7 +228,7 @@ async function directionsDistanceKm(origin, destination, profile = "driving-car"
         ],
     });
 
-    const data = await orsFetchJson(url, { method: "POST", body });
+    const data = await orsFetchJson(url, {method: "POST", body});
 
     const meters =
         data?.routes?.[0]?.summary?.distance ??
@@ -237,7 +238,7 @@ async function directionsDistanceKm(origin, destination, profile = "driving-car"
     if (typeof meters !== "number" || !isFinite(meters) || meters <= 0) {
         const err = new Error("Distância não retornada pela API (payload inesperado).");
         err.status = 502;
-        err.details = { data };
+        err.details = {data};
         throw err;
     }
 
@@ -252,7 +253,7 @@ app.post("/api/distance", async (req, res) => {
         const profile = String(req.body?.profile || "driving-car").trim();
 
         if (!origin || !destination) {
-            return res.status(400).json({ error: "Informe origem e destino." });
+            return res.status(400).json({error: "Informe origem e destino."});
         }
 
         const km = await directionsDistanceKm(origin, destination, profile);
@@ -265,10 +266,10 @@ app.post("/api/distance", async (req, res) => {
             });
         }
 
-        return res.json({ distance_km: Number(km.toFixed(2)) });
+        return res.json({distance_km: Number(km.toFixed(2))});
     } catch (e) {
         console.error("ERRO /api/distance:", e?.details || e);
-        return res.status(e.status || 500).json({ error: e.message || "Erro interno" });
+        return res.status(e.status || 500).json({error: e.message || "Erro interno"});
     }
 });
 
