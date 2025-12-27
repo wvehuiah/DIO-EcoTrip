@@ -43,6 +43,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "https://wvehuiah.github.io",
     "https://wvehuiah.github.io/DIO-EcoTrip",
+    "https://dio-ecotrip.onrender.com/"
 ];
 
 const ALLOWED_ORIGINS = (() => {
